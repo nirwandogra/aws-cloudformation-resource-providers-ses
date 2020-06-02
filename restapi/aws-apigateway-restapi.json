@@ -1,0 +1,138 @@
+{
+    "typeName": "AWS::ApiGateway::RestApi",
+    "description": "An example resource schema demonstrating some basic constructs and validation rules.",
+    "sourceUrl": "https://github.com/aws-cloudformation/aws-cloudformation-rpdk.git",
+    "definitions": {
+        "EndpointConfiguration": {
+            "type": "object",
+            "properties": {
+                "Types": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "VpcEndpointIds": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "S3Location": {
+            "type": "object",
+            "properties": {
+                "Bucket": {
+                    "type": "string"
+                },
+                "Key": {
+                    "type": "string"
+                },
+                "Version": {
+                    "type": "string"
+                },
+                "ETag": {
+                    "type": "string"
+                }
+            }
+        },
+        "Tag": {
+            "type": "object",
+            "properties": {
+                "Key": {
+                    "type": "string"
+                },
+                "Value": {
+                    "type": "string"
+                }
+            }
+        }
+    },
+    "properties": {
+        "Id": {
+            "type": "string"
+        },
+        "ApiKeySourceType": {
+            "type": "string"
+        },
+        "BinaryMediaTypes": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            }
+        },
+        "Body": {
+            "type": "object"
+        },
+        "BodyS3Location": {
+            "$ref": "#/definitions/S3Location"
+        },
+        "CloneFrom": {
+            "type": "string"
+        },
+        "EndpointConfiguration": {
+            "$ref": "#/definitions/EndpointConfiguration"
+        },
+        "Description": {
+            "type": "string"
+        },
+        "FailOnWarnings": {
+            "type": "boolean"
+        },
+        "Name": {
+            "type": "string"
+        },
+        "MinimumCompressionSize": {
+            "type": "integer"
+        },
+        "Mode": {
+          "type": "string"
+        },
+        "Policy": {
+            "type": "object"
+        },
+        "Parameters": {
+          "type": "object"
+        },
+        "Tags": {
+            "type": "array",
+            "items": {
+                "$ref": "#/definitions/Tag"
+            }
+        }
+    },
+    "additionalProperties": false,
+    "primaryIdentifier": [
+        "/properties/Id"
+    ],
+    "handlers": {
+        "create": {
+            "permissions": [
+                "apigateway:*",
+                "s3:*"
+            ]
+        },
+        "read": {
+            "permissions": [
+                "apigateway:GET"
+            ]
+        },
+        "update": {
+            "permissions": [
+                "apigateway:*",
+                "s3:*"
+            ]
+        },
+        "delete": {
+            "permissions": [
+                "apigateway:DELETE"
+            ]
+        },
+        "list": {
+            "permissions": [
+                "apigateway:GET"
+            ]
+        }
+    }
+}

@@ -1,0 +1,16 @@
+{
+    "typeName": "AWS::ApiGateway::RestApi",
+    "language": "java",
+    "runtime": "java8",
+    "entrypoint": "software.amazon.apigateway.restapi.HandlerWrapper::handleRequest",
+    "testEntrypoint": "software.amazon.apigateway.restapi.HandlerWrapper::testEntrypoint",
+    "settings": {
+        "namespace": [
+            "software",
+            "amazon",
+            "apigateway",
+            "restapi"
+        ],
+        "codegen_template_path": "default"
+    }
+}
