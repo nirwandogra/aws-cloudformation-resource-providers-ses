@@ -70,7 +70,6 @@ public class ApiGatewayClientWrapper {
                     , String.class).get();
             }
             else if (action.name().equalsIgnoreCase(DELETE.name())) {
-                System.out.println(request);
                 clientProxy.injectCredentialsAndInvokeV2(
                     request, requestFunction);
             }
@@ -80,7 +79,7 @@ public class ApiGatewayClientWrapper {
             );
         } catch (UnauthorizedException | BadRequestException | SdkClientException
             | ConflictException | LimitExceededException | TooManyRequestsException e) {
-            throw new CfnInvalidRequestException(resourceModel.toString(), e);
+            throw new CfnInvalidRequestException(e.getMessage(), e);
         } catch (AwsServiceException e) {
             throw new CfnGeneralServiceException(request.getClass().getName(), e);
         }
@@ -158,8 +157,10 @@ public class ApiGatewayClientWrapper {
 
     private static Map<String, String> convertTagListToMap(List<Tag> tags) {
         Map<String, String> map = new HashMap<>();
-        for (Tag tag : tags) {
-            map.put(tag.getKey(), tag.getValue());
+        if(tags != null) {
+            for (Tag tag : tags) {
+                map.put(tag.getKey(), tag.getValue());
+            }
         }
         return map;
     }

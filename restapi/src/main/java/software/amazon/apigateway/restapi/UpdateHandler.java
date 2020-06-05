@@ -24,9 +24,10 @@ import java.util.Objects;
 
 import static software.amazon.apigateway.restapi.ApiGatewayClientWrapper.apiGatewayClient;
 import static software.amazon.apigateway.restapi.ApiGatewayClientWrapper.execute;
-import static software.amazon.apigateway.restapi.ApiGatewayUtils.   getTypesToCreateOrRemove;
+import static software.amazon.apigateway.restapi.ApiGatewayUtils.getTypesToCreateOrRemove;
 import static software.amazon.apigateway.restapi.ApiGatewayUtils.newPatchOperations;
 import static software.amazon.apigateway.restapi.ApiGatewayUtils.useImportApi;
+import static software.amazon.apigateway.restapi.ApiGatewayUtils.validateRestApiResource;
 
 public class UpdateHandler extends BaseHandler<CallbackContext> {
     public static final Gson gson = new Gson();
@@ -40,6 +41,8 @@ public class UpdateHandler extends BaseHandler<CallbackContext> {
         final Logger logger) {
 
         final ResourceModel resourceModel = request.getDesiredResourceState();
+
+        validateRestApiResource(resourceModel);
 
         if (useImportApi(resourceModel)) {
             resourceModel.setId(execute(proxy, resourceModel, Action.UPDATE,

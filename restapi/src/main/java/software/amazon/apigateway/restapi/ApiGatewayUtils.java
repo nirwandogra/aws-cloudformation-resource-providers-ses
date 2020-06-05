@@ -5,12 +5,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.Sets;
 import org.apache.commons.collections.CollectionUtils;
 import software.amazon.awssdk.arns.Arn;
+import software.amazon.awssdk.core.ResponseBytes;
 import software.amazon.awssdk.services.apigateway.model.EndpointConfiguration;
 import software.amazon.awssdk.services.apigateway.model.EndpointType;
 import software.amazon.awssdk.services.apigateway.model.Op;
 import software.amazon.awssdk.services.apigateway.model.PatchOperation;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.cloudformation.exceptions.TerminalException;
 import software.amazon.cloudformation.proxy.AmazonWebServicesClientProxy;
 import software.amazon.cloudformation.proxy.Logger;
@@ -96,20 +98,17 @@ public class ApiGatewayUtils {
         Logger logger) {
         S3Client s3Client = S3Client.builder().build();
         try {
-
+            logger.log("Fetching file from S3");
             GetObjectRequest request = GetObjectRequest.builder().bucket(s3Location.getBucket())
                 .ifMatch(s3Location.getETag())
                 .key(s3Location.getKey()).build();
 
-            byte[] response = proxy.injectCredentialsAndInvokeV2InputStream(
-                request, s3Client::getObject).readAllBytes();
+            ResponseBytes<GetObjectResponse> response = proxy.injectCredentialsAndInvokeV2Bytes
+                (request, s3Client::getObjectAsBytes);
 
-            return new String(response);
+            return response.asUtf8String();
         } catch (Throwable t) {
-            t.printStackTrace();
-            logger.log(t.getMessage());
-            logger.log(t.getCause().toString());
-            logger.log(t.getStackTrace().toString());
+            logger.log("Error while fetching file from S3 " + t.getMessage());
             return null;
         }
     }
