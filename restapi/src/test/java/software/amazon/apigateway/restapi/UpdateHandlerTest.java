@@ -1,32 +1,20 @@
 package software.amazon.apigateway.restapi;
 
 import com.google.gson.Gson;
-import org.apache.commons.collections.ArrayStack;
-import org.junit.Ignore;
-import org.junit.Rule;
-import org.junit.contrib.java.lang.system.EnvironmentVariables;
-import org.junit.platform.commons.util.CollectionUtils;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mockito;
-import software.amazon.awssdk.awscore.AwsResponse;
+import org.mockito.junit.jupiter.MockitoExtension;
 import software.amazon.awssdk.core.ResponseBytes;
-import software.amazon.awssdk.services.apigateway.model.CreateRestApiResponse;
 import software.amazon.awssdk.services.apigateway.model.GetTagsRequest;
 import software.amazon.awssdk.services.apigateway.model.GetTagsResponse;
 import software.amazon.awssdk.services.apigateway.model.PutRestApiRequest;
-import software.amazon.awssdk.services.apigateway.model.TagResourceResponse;
 import software.amazon.awssdk.services.apigateway.model.UpdateRestApiRequest;
 import software.amazon.awssdk.services.apigateway.model.UpdateRestApiResponse;
 import software.amazon.awssdk.services.s3.model.GetObjectResponse;
-import software.amazon.cloudformation.proxy.AmazonWebServicesClientProxy;
-import software.amazon.cloudformation.proxy.Logger;
 import software.amazon.cloudformation.proxy.OperationStatus;
 import software.amazon.cloudformation.proxy.ProgressEvent;
 import software.amazon.cloudformation.proxy.ResourceHandlerRequest;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
@@ -35,28 +23,11 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.Assert.assertEquals;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static software.amazon.apigateway.restapi.CreateHandlerTest.getSampleBody;
 
 @ExtendWith(MockitoExtension.class)
-public class UpdateHandlerTest {
-
-    @Mock
-    private AmazonWebServicesClientProxy proxy;
-
-    @Mock
-    private Logger logger;
-
-    @Rule
-    public final EnvironmentVariables environmentVariables
-        = new EnvironmentVariables();
-
-    @BeforeEach
-    public void setup() {
-        proxy = mock(AmazonWebServicesClientProxy.class);
-        logger = mock(Logger.class);
-        environmentVariables.set("AWS_REGION", "us-east-1");
-    }
+public class UpdateHandlerTest extends BaseHandlerTest {
 
     @Test
     public void handleRequest_SimpleSuccess() {
@@ -75,6 +46,9 @@ public class UpdateHandlerTest {
             .previousResourceState(previousStage)
             .logicalResourceIdentifier("id")
             .build();
+
+        when(proxy.injectCredentialsAndInvokeV2(Mockito.any(GetTagsRequest.class), Mockito.any())).
+            thenReturn(GetTagsResponse.builder().tags(Collections.singletonMap("hello", "world")).build());
 
         when(proxy.injectCredentialsAndInvokeV2(Mockito.any(UpdateRestApiRequest.class), Mockito.any())).
             thenReturn(UpdateRestApiResponse.builder().name("name2").id("random").build());
@@ -96,25 +70,7 @@ public class UpdateHandlerTest {
 
     @Test
     public void handleRequest_SimpleSuccess_S3Body() {
-        String body= "{\n" +
-                     "        \"swagger\": 2,\n" +
-                     "        \"info\":\n" +
-                     "        {\n" +
-                     "            \"version\": \"0.0.1\",\n" +
-                     "            \"title\": \"test\"\n" +
-                     "        },\n" +
-                     "        \"basePath\": \"/pete\",\n" +
-                     "        \"schemes\": [\n" +
-                     "            \"https\"\n" +
-                     "        ],\n" +
-                     "        \"definitions\":\n" +
-                     "        {\n" +
-                     "            \"Empty\":\n" +
-                     "            {\n" +
-                     "                \"type\": \"object\"\n" +
-                     "            }\n" +
-                     "        }\n" +
-                     "    }";
+        String body = getSampleBody();
 
         Map bodyMap = new Gson().fromJson(body, Map.class);
 
@@ -173,25 +129,7 @@ public class UpdateHandlerTest {
             .logicalResourceIdentifier("rest api")
             .build();
 
-        String body= "{\n" +
-                     "        \"swagger\": 2,\n" +
-                     "        \"info\":\n" +
-                     "        {\n" +
-                     "            \"version\": \"0.0.1\",\n" +
-                     "            \"title\": \"test\"\n" +
-                     "        },\n" +
-                     "        \"basePath\": \"/pete\",\n" +
-                     "        \"schemes\": [\n" +
-                     "            \"https\"\n" +
-                     "        ],\n" +
-                     "        \"definitions\":\n" +
-                     "        {\n" +
-                     "            \"Empty\":\n" +
-                     "            {\n" +
-                     "                \"type\": \"object\"\n" +
-                     "            }\n" +
-                     "        }\n" +
-                     "    }";
+        String body = getSampleBody();
 
         when(proxy.injectCredentialsAndInvokeV2Bytes(Mockito.any(), Mockito.any()))
             .thenReturn(ResponseBytes.fromByteArray(GetObjectResponse.builder().build(),

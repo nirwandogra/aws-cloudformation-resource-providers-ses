@@ -4,7 +4,6 @@ import com.google.gson.Gson;
 import software.amazon.awssdk.core.SdkBytes;
 import software.amazon.awssdk.services.apigateway.model.CreateRestApiRequest;
 import software.amazon.awssdk.services.apigateway.model.ImportRestApiRequest;
-import software.amazon.cloudformation.Action;
 import software.amazon.cloudformation.proxy.AmazonWebServicesClientProxy;
 import software.amazon.cloudformation.proxy.Logger;
 import software.amazon.cloudformation.proxy.OperationStatus;
@@ -14,11 +13,12 @@ import software.amazon.cloudformation.proxy.ResourceHandlerRequest;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
-import static software.amazon.apigateway.restapi.ApiGatewayClientWrapper.apiGatewayClient;
-import static software.amazon.apigateway.restapi.ApiGatewayClientWrapper.execute;
-import static software.amazon.apigateway.restapi.ApiGatewayUtils.getBodyFromS3;
-import static software.amazon.apigateway.restapi.ApiGatewayUtils.useImportApi;
-import static software.amazon.apigateway.restapi.ApiGatewayUtils.validateRestApiResource;
+import static software.amazon.apigateway.restapi.ApiGatewayClientWrapper.createRestApi;
+import static software.amazon.apigateway.restapi.ApiGatewayClientWrapper.importRestApi;
+import static software.amazon.apigateway.restapi.RestApiUtils.useImportApi;
+import static software.amazon.apigateway.restapi.RestApiUtils.validateRestApiResource;
+import static software.amazon.apigateway.restapi.S3Utils.getBodyFromS3;
+import static software.amazon.apigateway.restapi.Translator.translateEndpointConfiguration;
 
 public class CreateHandler extends BaseHandler<CallbackContext> {
     public static final Gson gson = new Gson();
@@ -35,16 +35,12 @@ public class CreateHandler extends BaseHandler<CallbackContext> {
         validateRestApiResource(resourceModel);
 
         if (useImportApi(resourceModel)) {
-            resourceModel.setId(execute(proxy, resourceModel, Action.CREATE,
-                getImportRestApiRequest(resourceModel, proxy, logger), apiGatewayClient::importRestApi,
-                request.getLogicalResourceIdentifier(), logger));
+            resourceModel.setId(importRestApi(proxy, resourceModel, getImportRestApiRequest
+                (resourceModel, proxy, logger), logger));
         }
         else {
-            resourceModel.setId(execute(proxy, resourceModel, Action.CREATE,
-                getCreateRestApiRequest(resourceModel), apiGatewayClient::createRestApi,
-                request.getLogicalResourceIdentifier(), logger));
+            resourceModel.setId(createRestApi(proxy, resourceModel, getCreateRestApiRequest(resourceModel), logger));
         }
-
 
         return ProgressEvent.<ResourceModel, CallbackContext>builder()
             .resourceModel(resourceModel)
@@ -58,7 +54,7 @@ public class CreateHandler extends BaseHandler<CallbackContext> {
             .binaryMediaTypes(resource.getBinaryMediaTypes())
             .cloneFrom(resource.getCloneFrom())
             .description(resource.getDescription())
-            .endpointConfiguration(ApiGatewayUtils.translateEndpointConfiguration(resource.getEndpointConfiguration()))
+            .endpointConfiguration(translateEndpointConfiguration(resource.getEndpointConfiguration()))
             .minimumCompressionSize(resource.getMinimumCompressionSize())
             .name(resource.getName())
             .policy(resource.getPolicy() != null ? gson.toJson(resource.getPolicy()) : null).build();
@@ -73,12 +69,8 @@ public class CreateHandler extends BaseHandler<CallbackContext> {
         }
         else if (resource.getBodyS3Location() != null) {
             body = getBodyFromS3(resource.getBodyS3Location(), proxy, logger);
-            logger.log("this is the body received from s3" + body);
         }
 
-        logger.log("this is the body received from s3" + body);
-
-        @SuppressWarnings("unchecked")
         Map<String, String> parameters = gson.fromJson(gson.toJson(resource.getParameters()), Map.class);
 
         return ImportRestApiRequest.builder()

@@ -7,7 +7,6 @@ import software.amazon.awssdk.services.apigateway.model.Op;
 import software.amazon.awssdk.services.apigateway.model.PatchOperation;
 import software.amazon.awssdk.services.apigateway.model.PutRestApiRequest;
 import software.amazon.awssdk.services.apigateway.model.UpdateRestApiRequest;
-import software.amazon.cloudformation.Action;
 import software.amazon.cloudformation.proxy.AmazonWebServicesClientProxy;
 import software.amazon.cloudformation.proxy.Logger;
 import software.amazon.cloudformation.proxy.OperationStatus;
@@ -22,12 +21,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-import static software.amazon.apigateway.restapi.ApiGatewayClientWrapper.apiGatewayClient;
-import static software.amazon.apigateway.restapi.ApiGatewayClientWrapper.execute;
-import static software.amazon.apigateway.restapi.ApiGatewayUtils.getTypesToCreateOrRemove;
-import static software.amazon.apigateway.restapi.ApiGatewayUtils.newPatchOperations;
-import static software.amazon.apigateway.restapi.ApiGatewayUtils.useImportApi;
-import static software.amazon.apigateway.restapi.ApiGatewayUtils.validateRestApiResource;
+import static software.amazon.apigateway.restapi.ApiGatewayClientWrapper.putRestApi;
+import static software.amazon.apigateway.restapi.ApiGatewayClientWrapper.updateRestApi;
+import static software.amazon.apigateway.restapi.RestApiUtils.getTypesToCreateOrRemove;
+import static software.amazon.apigateway.restapi.RestApiUtils.newPatchOperations;
+import static software.amazon.apigateway.restapi.RestApiUtils.useImportApi;
+import static software.amazon.apigateway.restapi.RestApiUtils.validateRestApiResource;
+import static software.amazon.apigateway.restapi.S3Utils.getBodyFromS3;
 
 public class UpdateHandler extends BaseHandler<CallbackContext> {
     public static final Gson gson = new Gson();
@@ -44,16 +44,17 @@ public class UpdateHandler extends BaseHandler<CallbackContext> {
 
         validateRestApiResource(resourceModel);
 
+        /*
+         * APIGW Api can either be update by calling put rest api or directly via Update Rest Api.
+         * We decide whether we want to call PutRestApi or UpdateRestApi
+         * */
         if (useImportApi(resourceModel)) {
-            resourceModel.setId(execute(proxy, resourceModel, Action.UPDATE,
-                getPutRestApiRequest(resourceModel, proxy, logger), apiGatewayClient::putRestApi,
-                request.getLogicalResourceIdentifier(), logger));
+            resourceModel.setId(putRestApi(proxy, resourceModel, getPutRestApiRequest(resourceModel, proxy, logger),
+                logger));
         }
         else {
-            resourceModel.setId(execute(proxy, resourceModel, Action.UPDATE,
-                getUpdateRestApiRequest(resourceModel, request.getPreviousResourceState()),
-                apiGatewayClient::updateRestApi,
-                request.getLogicalResourceIdentifier(), logger));
+            resourceModel.setId(updateRestApi(proxy, resourceModel, getUpdateRestApiRequest
+                (resourceModel, request.getPreviousResourceState()), logger));
         }
 
         ApiGatewayClientWrapper.updateTags(resourceModel, proxy);
@@ -67,16 +68,40 @@ public class UpdateHandler extends BaseHandler<CallbackContext> {
     private UpdateRestApiRequest getUpdateRestApiRequest(
         ResourceModel currentResource,
         ResourceModel previousResource) {
-        final Map<String, Object> attributesToReplace = new HashMap<>();
-        final Map<String, Object> attributesToRemove = new HashMap<>();
+
         final List<String> previousTypes = (previousResource == null) ?
             new ArrayList<>() : previousResource.getBinaryMediaTypes();
+
         final List<String> currentTypes = (currentResource == null) ?
             new ArrayList<>() : currentResource.getBinaryMediaTypes();
 
-        final List<String> typesToCreate = getTypesToCreateOrRemove(previousTypes, currentTypes, true);
-        final List<String> typesToRemove = getTypesToCreateOrRemove(previousTypes, currentTypes, false);
+        List<PatchOperation> patchOp = newPatchOperations(getAttributesToReplace(currentResource,
+            previousResource, getTypesToCreateOrRemove(previousTypes, currentTypes, true)), Op.REPLACE);
 
+        List<PatchOperation> removeOp = newPatchOperations(getAttributesToRemove(getTypesToCreateOrRemove(
+            previousTypes,
+            currentTypes,
+            false)), Op.REMOVE);
+
+        patchOp.addAll(removeOp);
+
+        Collection<PatchOperation> patchOperations = patchOp;
+
+        return UpdateRestApiRequest.builder().restApiId(currentResource.getId())
+            .patchOperations((patchOperations)).build();
+    }
+
+    private Map<String, Object> getAttributesToRemove(List<String> typesToRemove) {
+        final Map<String, Object> attributesToRemove = new HashMap<>();
+        if (CollectionUtils.isNotEmpty(typesToRemove)) {
+            typesToRemove.forEach(type -> attributesToRemove.put("/binaryMediaTypes/" + type, type));
+        }
+        return attributesToRemove;
+    }
+
+    private Map<String, Object> getAttributesToReplace(
+        ResourceModel currentResource, ResourceModel previousResource, List<String> typesToCreate) {
+        final Map<String, Object> attributesToReplace = new HashMap<>();
         attributesToReplace.put("/apiKeySource", currentResource.getApiKeySourceType());
         attributesToReplace.put("/description", currentResource.getDescription());
         attributesToReplace.put("/name", currentResource.getName());
@@ -85,6 +110,7 @@ public class UpdateHandler extends BaseHandler<CallbackContext> {
 
         final String previousEndpointType = getEndpointType(previousResource);
         final String currentEndpointType = getEndpointType(currentResource);
+
         if (!Objects.equals(previousEndpointType, currentEndpointType)) {
             if (REST_API_DEFAULT_TYPE.equals(currentEndpointType)) {
                 attributesToReplace.put("/endpointConfiguration/types/REGIONAL", currentEndpointType);
@@ -97,25 +123,12 @@ public class UpdateHandler extends BaseHandler<CallbackContext> {
         if (CollectionUtils.isNotEmpty(typesToCreate)) {
             typesToCreate.forEach(type -> attributesToReplace.put("/binaryMediaTypes/" + type, type));
         }
-        if (CollectionUtils.isNotEmpty(typesToRemove)) {
-            typesToRemove.forEach(type -> attributesToRemove.put("/binaryMediaTypes/" + type, type));
-        }
-
-        List<PatchOperation> patchOp = newPatchOperations(attributesToReplace, Op.REPLACE);
-        List<PatchOperation> removeOp = newPatchOperations(attributesToRemove, Op.REMOVE);
-
-        patchOp.addAll(removeOp);
-
-        Collection<PatchOperation> patchOperations = patchOp;
-
-        return UpdateRestApiRequest.builder().restApiId(currentResource.getId())
-            .patchOperations((patchOperations)).build();
+        return attributesToReplace;
     }
 
     private String getEndpointType(ResourceModel resource) {
         if (resource != null && resource.getEndpointConfiguration() != null &&
             CollectionUtils.isNotEmpty(resource.getEndpointConfiguration().getTypes())) {
-            //User can only specify one type
             return resource.getEndpointConfiguration().getTypes().get(0);
         }
         else {
@@ -128,15 +141,18 @@ public class UpdateHandler extends BaseHandler<CallbackContext> {
         AmazonWebServicesClientProxy proxy,
         Logger logger) {
         String body = null;
+
+        /*
+         * Extract the body either from BodyS3Location or Body itself
+         * */
         if (resourceModel.getBody() != null) {
             body = gson.toJson(resourceModel.getBody());
         }
         else if (resourceModel.getBodyS3Location() != null) {
-            body = ApiGatewayUtils.getBodyFromS3(resourceModel.getBodyS3Location(), proxy, logger);
+            body = getBodyFromS3(resourceModel.getBodyS3Location(), proxy, logger);
         }
 
-        @SuppressWarnings("unchecked")
-        Map<String,String> parameters = gson.fromJson(gson.toJson(resourceModel.getParameters()), Map.class);
+        Map<String, String> parameters = gson.fromJson(gson.toJson(resourceModel.getParameters()), Map.class);
 
         return PutRestApiRequest.builder()
             .restApiId(resourceModel.getId())

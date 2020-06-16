@@ -16,19 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 @ExtendWith(MockitoExtension.class)
-public class ListHandlerTest {
-
-    @Mock
-    private AmazonWebServicesClientProxy proxy;
-
-    @Mock
-    private Logger logger;
-
-    @BeforeEach
-    public void setup() {
-        proxy = mock(AmazonWebServicesClientProxy.class);
-        logger = mock(Logger.class);
-    }
+public class ListHandlerTest extends BaseHandlerTest {
 
 //    @Ignore
 //    @Test

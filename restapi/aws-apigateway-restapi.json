@@ -109,8 +109,9 @@
     "handlers": {
         "create": {
             "permissions": [
-                "apigateway:*",
-                "s3:*"
+                "apigateway:POST",
+                "apigateway:UpdateRestApiPolicy",
+                "s3:GetObject"
             ]
         },
         "read": {
@@ -120,8 +121,9 @@
         },
         "update": {
             "permissions": [
-                "apigateway:*",
-                "s3:*"
+                "apigateway:POST",
+                "apigateway:UpdateRestApiPolicy",
+                "s3:GetObject"
             ]
         },
         "delete": {

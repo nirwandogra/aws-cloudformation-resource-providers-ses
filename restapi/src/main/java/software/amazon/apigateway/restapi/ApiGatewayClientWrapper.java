@@ -2,6 +2,7 @@ package software.amazon.apigateway.restapi;
 
 import com.amazonaws.regions.Region;
 import com.amazonaws.regions.Regions;
+import com.google.common.collect.Maps;
 import lombok.Getter;
 import org.apache.commons.lang3.StringUtils;
 import software.amazon.awssdk.awscore.AwsRequest;
@@ -11,14 +12,19 @@ import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.services.apigateway.ApiGatewayClient;
 import software.amazon.awssdk.services.apigateway.model.BadRequestException;
 import software.amazon.awssdk.services.apigateway.model.ConflictException;
+import software.amazon.awssdk.services.apigateway.model.CreateRestApiRequest;
+import software.amazon.awssdk.services.apigateway.model.DeleteRestApiRequest;
+import software.amazon.awssdk.services.apigateway.model.GetRestApiRequest;
 import software.amazon.awssdk.services.apigateway.model.GetTagsRequest;
-import software.amazon.awssdk.services.apigateway.model.GetTagsResponse;
+import software.amazon.awssdk.services.apigateway.model.ImportRestApiRequest;
 import software.amazon.awssdk.services.apigateway.model.LimitExceededException;
 import software.amazon.awssdk.services.apigateway.model.NotFoundException;
+import software.amazon.awssdk.services.apigateway.model.PutRestApiRequest;
 import software.amazon.awssdk.services.apigateway.model.TagResourceRequest;
 import software.amazon.awssdk.services.apigateway.model.TooManyRequestsException;
 import software.amazon.awssdk.services.apigateway.model.UnauthorizedException;
 import software.amazon.awssdk.services.apigateway.model.UntagResourceRequest;
+import software.amazon.awssdk.services.apigateway.model.UpdateRestApiRequest;
 import software.amazon.cloudformation.Action;
 import software.amazon.cloudformation.exceptions.CfnGeneralServiceException;
 import software.amazon.cloudformation.exceptions.CfnInvalidRequestException;
@@ -31,13 +37,14 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
-import static software.amazon.apigateway.restapi.ApiGatewayUtils.getRestApiArn;
+import static software.amazon.apigateway.restapi.ArnUtils.getRestApiArn;
 import static software.amazon.apigateway.restapi.ResourceModel.IDENTIFIER_KEY_ID;
 import static software.amazon.cloudformation.Action.DELETE;
 
 public class ApiGatewayClientWrapper {
-    public static final ApiGatewayClient apiGatewayClient = ApiGatewayClient.builder().build();
+    private static final ApiGatewayClient apiGatewayClient = ApiGatewayClient.builder().build();
 
     private static final Region region = Region.getRegion(
         Regions.fromName(System.getenv(Constants.ENV_VARIABLE_REGION.getValue()))
@@ -55,10 +62,48 @@ public class ApiGatewayClientWrapper {
         }
     }
 
+    public static <RequestT extends AwsRequest, ResultT extends AwsResponse> String createRestApi(
+        final AmazonWebServicesClientProxy proxy, final ResourceModel resourceModel, RequestT request, Logger logger) {
+        return execute(proxy, resourceModel, Action.CREATE,
+            (CreateRestApiRequest) request, apiGatewayClient::createRestApi, logger);
+    }
+
+    public static <RequestT extends AwsRequest, ResultT extends AwsResponse> String updateRestApi(
+        final AmazonWebServicesClientProxy proxy, final ResourceModel resourceModel, RequestT request, Logger logger) {
+        return execute(proxy, resourceModel, Action.UPDATE,
+            (UpdateRestApiRequest) request, apiGatewayClient::updateRestApi, logger);
+    }
+
+    public static <RequestT extends AwsRequest, ResultT extends AwsResponse> String deleteRestApi(
+        final AmazonWebServicesClientProxy proxy, final ResourceModel resourceModel, RequestT request, Logger logger) {
+        return execute(proxy, resourceModel, DELETE,
+            (DeleteRestApiRequest) request, apiGatewayClient::deleteRestApi, logger);
+    }
+
+    public static <RequestT extends AwsRequest, ResultT extends AwsResponse> String getRestApi(
+        final AmazonWebServicesClientProxy proxy, final ResourceModel resourceModel, RequestT request, Logger logger) {
+        return execute(proxy, resourceModel, Action.CREATE,
+            (GetRestApiRequest) request, apiGatewayClient::getRestApi, logger);
+    }
+
+    public static <RequestT extends AwsRequest, ResultT extends AwsResponse> String importRestApi(
+        final AmazonWebServicesClientProxy proxy, final ResourceModel resourceModel, RequestT request, Logger logger) {
+        return execute(proxy, resourceModel, Action.CREATE,
+            (ImportRestApiRequest) request, apiGatewayClient::importRestApi,
+            logger);
+    }
+
+    public static <RequestT extends AwsRequest, ResultT extends AwsResponse> String putRestApi(
+        final AmazonWebServicesClientProxy proxy, final ResourceModel resourceModel, RequestT request,
+        Logger logger) {
+        return execute(proxy, resourceModel, Action.UPDATE,
+            (PutRestApiRequest) request, apiGatewayClient::putRestApi, logger);
+    }
+
     public static <RequestT extends AwsRequest, ResultT extends AwsResponse> String execute(
         final AmazonWebServicesClientProxy clientProxy, final ResourceModel resourceModel
         , Action action, RequestT request, Function<RequestT, ResultT> requestFunction,
-        String logicalResourceIdentifier, Logger logger) {
+        Logger logger) {
 
         logger.log("Invoking with request:" + request.toString());
 
@@ -86,82 +131,29 @@ public class ApiGatewayClientWrapper {
         return null;
     }
 
-    public static void addTags(
-        ResourceModel input,
-        AmazonWebServicesClientProxy proxy) {
-        String resourceArn = getRestApiArn(input.getId(), region);
-
-        GetTagsResponse oldTagsResult = proxy.injectCredentialsAndInvokeV2
-            (GetTagsRequest.builder().resourceArn(resourceArn).build(), apiGatewayClient::getTags);
-
-        if (!newTagsUpdated(input, oldTagsResult)) {
-            return;
-        }
-
-        Map<String, String> tags = convertTagListToMap(input.getTags());
-
-        if (tags != null && tags.size() > 0) {
-            proxy.injectCredentialsAndInvokeV2
-                (TagResourceRequest.builder().tags(tags).build(), apiGatewayClient::tagResource);
-        }
-    }
-
     public static void updateTags(ResourceModel resourceModel, AmazonWebServicesClientProxy proxy) {
-        removeExistingTags(resourceModel, proxy);
-        addTags(resourceModel, proxy);
-    }
+        String resourceArn = getRestApiArn(resourceModel.getId(), region);
 
-    public static void removeExistingTags(
-        ResourceModel input,
-        AmazonWebServicesClientProxy proxy) {
-        String resourceArn = getRestApiArn(input.getId(), region);
-        if (resourceArn == null) {
-            return;
-        }
+        Map<String, String> previousTags = proxy.injectCredentialsAndInvokeV2
+            (GetTagsRequest.builder().resourceArn(resourceArn).build(), apiGatewayClient::getTags).tags();
 
-        GetTagsResponse oldTagsResult = proxy.injectCredentialsAndInvokeV2
-            (GetTagsRequest.builder().resourceArn(resourceArn).build(), apiGatewayClient::getTags);
+        Map<String, String> newTags = resourceModel.getTags() != null ? resourceModel.getTags().
+            stream().collect(Collectors.toMap(Tag::getKey, Tag:: getValue)) : new HashMap<>();
 
-        if (!newTagsUpdated(input, oldTagsResult)) {
-            return;
-        }
+        final List<String> tagsToRemove = new ArrayList<>(
+            Maps.difference(newTags, previousTags).entriesOnlyOnRight().keySet());
 
-        if (oldTagsResult != null && oldTagsResult.tags() != null && oldTagsResult.tags().size() > 0) {
+        final Map<String, String> tagsToCreate =
+            Maps.difference(newTags, previousTags).entriesOnlyOnLeft();
+
+        if (!tagsToRemove.isEmpty()) {
             proxy.injectCredentialsAndInvokeV2(UntagResourceRequest.builder().tagKeys
-                (new ArrayList<>(oldTagsResult.tags().keySet())).build(), apiGatewayClient::untagResource);
-        }
-    }
-
-    private static boolean newTagsUpdated(ResourceModel input, GetTagsResponse oldTagsResult) {
-        Map<String, String> newTags = new HashMap<>();
-        if (input.getTags() != null) {
-            newTags = convertTagListToMap(input.getTags());
+                (new ArrayList<>(previousTags.keySet())).build(), apiGatewayClient::untagResource);
         }
 
-        Map<String, String> oldTags = oldTagsResult == null ? new HashMap<>() : oldTagsResult.tags();
-
-        if (oldTags == null && newTags == null) {
-            return false;
+        if (!tagsToCreate.isEmpty()) {
+            proxy.injectCredentialsAndInvokeV2
+                (TagResourceRequest.builder().tags(newTags).build(), apiGatewayClient::tagResource);
         }
-
-        if ((oldTags == null && newTags != null) || (oldTags != null && newTags == null)) {
-            return true;
-        }
-
-        if (oldTags != null) {
-            return !oldTags.equals(newTags);
-        }
-
-        return true;
-    }
-
-    private static Map<String, String> convertTagListToMap(List<Tag> tags) {
-        Map<String, String> map = new HashMap<>();
-        if(tags != null) {
-            for (Tag tag : tags) {
-                map.put(tag.getKey(), tag.getValue());
-            }
-        }
-        return map;
     }
 }
